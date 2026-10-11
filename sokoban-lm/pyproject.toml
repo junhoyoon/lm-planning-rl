@@ -1,0 +1,32 @@
+[project]
+name = "sokolm"
+version = "0.1.0"
+description = "Single-turn Sokoban for a small decoder LM: environment, BFS solver, fixed splits, SFT and GRPO with TRL, evaluation"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "jinja2>=3.1",
+    "matplotlib>=3.11.2",
+    "numpy>=1.26",
+    # CUDA 12.8 wheels (they have the RTX 5090 / sm_120 kernels)
+    "torch==2.11.0",
+    "transformers>=5.19",
+    "trl==1.14.2",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

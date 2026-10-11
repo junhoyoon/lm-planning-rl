@@ -1,0 +1,74 @@
+{
+  "run_id": "20261010-190020-p4-2-eval-sft-anneal",
+  "name": "p4-2-eval-sft-anneal",
+  "created": "2026-10-10T19:00:20",
+  "claim_level": "own-experiment",
+  "config": {
+    "experiment": "p3_eval",
+    "split": "7x7-v1",
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+    "checkpoint": "20261010-182721-p4-2-sft-anneal/final",
+    "checkpoint_step": 1563,
+    "dtype": "bfloat16",
+    "torch": "2.11.0+cu128",
+    "transformers": "5.19.0",
+    "gpu": "NVIDIA GeForce RTX 5090",
+    "format": "spaced-words",
+    "boards": "the first n_per_bucket val boards of each bucket, in file order (all 300 by default)",
+    "n_per_bucket": 300,
+    "n_samples": 16,
+    "ks": [
+      1,
+      2,
+      4,
+      8,
+      16
+    ],
+    "seed": 0,
+    "batch_size": 512,
+    "mem_cap_gib": 10,
+    "greedy": {
+      "do_sample": false,
+      "temperature": 1.0,
+      "top_k": 0,
+      "top_p": 1.0,
+      "repetition_penalty": 1.0,
+      "max_new_tokens": 128,
+      "eos_token_id": [
+        151645,
+        151643
+      ],
+      "pad_token_id": 151643
+    },
+    "sample": {
+      "do_sample": true,
+      "temperature": 1.0,
+      "top_k": 0,
+      "top_p": 1.0,
+      "repetition_penalty": 1.0,
+      "max_new_tokens": 128,
+      "eos_token_id": [
+        151645,
+        151643
+      ],
+      "pad_token_id": 151643
+    }
+  },
+  "env": {
+    "python": "3.11.16",
+    "numpy": "2.4.6",
+    "torch": "2.11.0+cu128",
+    "transformers": "5.19.0",
+    "trl": "1.14.2",
+    "accelerate": "1.15.0",
+    "datasets": "5.1.0",
+    "uv_lock_sha256": "feb3275b90a48918cbb3d46566f84657382e4e06817a76a718c5ac3790030252",
+    "threads": "4",
+    "cuda_alloc_conf": "expandable_segments:True"
+  },
+  "code": {
+    "dev_commit": "1822216daa073978044e6919bdc99325f81d6e90",
+    "uncommitted_code_changes": false
+  }
+}

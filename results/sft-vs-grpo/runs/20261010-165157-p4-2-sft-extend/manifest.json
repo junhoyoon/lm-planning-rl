@@ -1,0 +1,53 @@
+{
+  "run_id": "20261010-165157-p4-2-sft-extend",
+  "name": "p4-2-sft-extend",
+  "created": "2026-10-10T16:51:57",
+  "claim_level": "own-experiment",
+  "config": {
+    "experiment": "p3_sft",
+    "split": "7x7-v1",
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+    "precision": "fp32 weights, gradients and AdamW states; bf16 autocast; greedy evaluation with a bf16 copy of the weights",
+    "torch": "2.11.0+cu128",
+    "transformers": "5.19.0",
+    "trl": "1.14.2",
+    "gpu": "NVIDIA GeForce RTX 5090",
+    "format": "spaced-words",
+    "boards": "training: the boards of the 'rl' part (25,000) of optimal length >= min_len (all with min_len 1), drawn without replacement in the order the Trainer's sampler fixes with the seed; evaluation: the first n_per_bucket val boards of each bucket, in file order (all 300 by default) (900 val boards); val loss on the 300 val in_dist boards",
+    "part": "rl",
+    "init": "20261010-034359-p3-4-len-all-s1/final",
+    "init_step": 4689,
+    "min_len": 1,
+    "train_boards": 25000,
+    "epochs": 1.0,
+    "lr": 2e-05,
+    "steps": 1563,
+    "warmup": 50,
+    "batch_size": 16,
+    "eval_every": 250,
+    "seed": 0,
+    "gen_batch": 256,
+    "loss_batch": 16,
+    "mem_cap_gib": 16,
+    "step0_reference": "20261010-101128-p3-5-sft-eval",
+    "train_eval": 300,
+    "save": true
+  },
+  "env": {
+    "python": "3.11.16",
+    "numpy": "2.4.6",
+    "torch": "2.11.0+cu128",
+    "transformers": "5.19.0",
+    "trl": "1.14.2",
+    "accelerate": "1.15.0",
+    "datasets": "5.1.0",
+    "uv_lock_sha256": "feb3275b90a48918cbb3d46566f84657382e4e06817a76a718c5ac3790030252",
+    "threads": "4",
+    "cuda_alloc_conf": "expandable_segments:True"
+  },
+  "code": {
+    "dev_commit": "79066013f5e59080ec3d0406ff17bdde809ca17d",
+    "uncommitted_code_changes": false
+  }
+}

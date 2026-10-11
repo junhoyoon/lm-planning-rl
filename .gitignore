@@ -1,0 +1,10 @@
+# environments and tool caches
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+# downloaded model files, generated split files and run outputs of the package (results/ keeps published runs)
+/sokoban-lm/data/
+/sokoban-lm/runs/
