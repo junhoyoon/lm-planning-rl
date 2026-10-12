@@ -19,6 +19,17 @@ BFS-optimal solutions.
 - **Compute:** GRPO took approximately 14× as long per training step as SFT in this setup.
 - **Evaluation scope:** One seed per run; validation boards only.
 
+![Animation: 300 validation boards as squares in two rows, colored by how many of 16 sampled answers solve each board, from the base model through SFT, then GRPO from the SFT model (top) and from SFT with the learning rate decayed to 0 (bottom)](results/sft-vs-grpo/board-solves.svg)
+
+Each square is one in-distribution validation board, colored by how many of 16 sampled answers solve it: for the base
+model from its evaluation run, then at the in-training evaluations of runs 1 and 6, every 100 GRPO steps (the report's
+tables use separate evaluations of the final checkpoints). Only groups of answers with different rewards give GRPO a
+gradient ([report §5.3](results/sft-vs-grpo/report.md#53-mixed-reward-groups-during-grpo-training)), and such groups
+come from boards solved sometimes but not every time: the orange squares. There were 38 for the base model, 112 for
+the SFT model, 58 after the learning-rate decay (run 4), and 46 and 35 at the last GRPO step of runs 1 and 6. Data and
+script: [`board-solves.json`](results/sft-vs-grpo/board-solves.json),
+[`board_solves.py`](results/sft-vs-grpo/board_solves.py).
+
 ## Layout
 
 | path | contents |
