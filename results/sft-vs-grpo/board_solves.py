@@ -412,13 +412,19 @@ def svg(data: dict) -> str:
                          "opacity")
              + "".join(css)
              + "@media (prefers-reduced-motion:reduce){.sq,.head,.sw,.fade{animation:none}}")
+    b = data["boards"]
+    first = {row: [x[row][0] for x in b] for row in ROWS}  # GRPO step 0: the SFT model, run 4
+    last = {row: [x[row][-1] for x in b] for row in ROWS}
+    orange = {row: classes(first[row])[1] for row in ROWS}
+    to_blue = {row: sum(0 < s < N_SAMPLES and e == N_SAMPLES for s, e in zip(first[row], last[row])) for row in ROWS}
     desc = ("Animation of 300 squares in two rows, one square per in-distribution validation board, colored by how "
             "many of 16 sampled answers solve the board: orange for 1 to 15, gray for none, blue for all. "
             "Both rows start at the base model, which solves almost no board, and move to the SFT model, which "
-            "solves most boards with every sample. The bottom row then trains one more SFT epoch with the learning "
-            "rate decayed to 0 (run 4) while the top row waits, and both rows run GRPO (runs 1 and 6). The bottom "
-            "row starts GRPO with about half as many orange boards; in both rows most orange boards turn blue during "
-            "GRPO.")
+            f"solves {classes(first['run1'])[2]} of the 300 boards with every sample. The bottom row then trains one "
+            "more SFT epoch with the learning rate decayed to 0 (run 4) while the top row waits, and both rows run "
+            f"GRPO (runs 1 and 6). GRPO starts with {orange['run1']} orange boards in the top row and "
+            f"{orange['run6']} in the bottom row. Of these, {to_blue['run1']} and {to_blue['run6']} are blue at the "
+            f"last step, when {classes(last['run1'])[1]} and {classes(last['run6'])[1]} boards are orange.")
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {WIDTH} {height:g}" width="{WIDTH}" '
             f'height="{height:g}" role="img" aria-labelledby="title desc">'
             f'<title id="title">Solve counts of 300 validation boards from the base model through SFT and GRPO</title>'
