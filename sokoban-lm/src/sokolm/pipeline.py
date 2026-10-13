@@ -1,9 +1,12 @@
-"""The runs behind the SFT and GRPO comparison: the fixed split, SFT, evaluation, GRPO and the validation loss of saved
-checkpoints. Each function writes one run directory (`sokolm.record`) and is one CLI command (`sokolm.cli`)."""
+"""The runs behind the SFT and GRPO comparison: the fixed split, new boards beyond the split, SFT, evaluation, GRPO and
+the validation loss of saved checkpoints. Each function writes one run directory (`sokolm.record`) and is one CLI
+command (`sokolm.cli`)."""
 
+import hashlib
 import json
 import time
 from collections import Counter
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -132,25 +135,28 @@ def _write_answers(w: RunWriter, answers: list[dict], boards: list[dict], step: 
                    mode_in_id: bool = True) -> None:
     """One episode record per answer; the generated ids are dropped (the completion text stays). Episode ids:
     '<mode>-<bucket>-<j>[-s<sample>]' for an eval run; at a training step 's<step>-<bucket>-<j>' (sft, greedy only)
-    or 's<step>-<greedy|sample<k>>-<bucket>-<j>' (grpo, `mode_in_id`); j = the board's position in its bucket."""
+    or 's<step>-<greedy|sample<k>>-<bucket>-<j>' (grpo, `mode_in_id`); j = the board's position in its bucket, with
+    at least three digits (four for the 2,000 new boards)."""
     by_id = {b["board_id"]: b for b in boards}
     number = _board_numbers(boards)
+    width = max(3, len(str(max(number.values(), default=0))))
     for r in answers:
         b = by_id[r["board_id"]]
         j = number[b["board_id"]]
         r.pop("ids")
         if step is None:
-            eid = f"{r['mode']}-{b['bucket']}-{j:03d}" + (f"-s{r['sample']:02d}" if r["mode"] == "sample" else "")
+            eid = f"{r['mode']}-{b['bucket']}-{j:0{width}d}" + (
+                f"-s{r['sample']:02d}" if r["mode"] == "sample" else "")
             w.add({"episode_id": eid, "case": r["mode"], "title": f"{r['mode']}, {b['bucket']}, optimal {b['opt_len']}",
                    **r})
             continue
         title = f"step {step}, {r['mode']}, {b['bucket']}, optimal {b['opt_len']}"
         if mode_in_id:
             tag = "greedy" if r["mode"] == "greedy" else f"sample{r['sample']:02d}"
-            w.add({"episode_id": f"s{step:04d}-{tag}-{b['bucket']}-{j:03d}", "step": step,
+            w.add({"episode_id": f"s{step:04d}-{tag}-{b['bucket']}-{j:0{width}d}", "step": step,
                    "case": f"step {step}, {r['mode']}", "title": title, **r})
         else:
-            w.add({"episode_id": f"s{step:04d}-{b['bucket']}-{j:03d}", "step": step, "case": f"step {step}",
+            w.add({"episode_id": f"s{step:04d}-{b['bucket']}-{j:0{width}d}", "step": step, "case": f"step {step}",
                    "title": title, **r})
 
 
@@ -159,14 +165,17 @@ def _write_answers(w: RunWriter, answers: list[dict], boards: list[dict], step: 
 
 def run_eval(split: str = "7x7-v1", name: str = "eval", n_per_bucket: int = 300, n_samples: int = 16,
              temperature: float = 1.0, seed: int = 0, batch_size: int = EVAL_BATCH,
-             mem_cap_gib: float = EVAL_MEM_CAP_GIB, checkpoint: Optional[str] = None) -> dict:
+             mem_cap_gib: float = EVAL_MEM_CAP_GIB, checkpoint: Optional[str] = None,
+             boards_file: Optional[str] = None) -> dict:
     """Evaluate the base model, or with `checkpoint` ('<run id>/<best|final>' of an sft or grpo run) a saved
-    checkpoint, on the val boards (EVAL_SELECTION).
+    checkpoint, on the val boards (EVAL_SELECTION), or with `boards_file` on the boards of that file in file order
+    (bucket NEW_BUCKET; a file of `run_new_boards`).
 
     Per board one greedy answer and n_samples sampled answers at `temperature`, with the weights in bf16.
     Metrics (`sokolm.evaluate`): greedy solve rate and pass@k per bucket and per optimal length, the share of boards
     with mixed sampled outcomes, parse failures, truncations, no-ops, answer length relative to optimal, the share of
-    answers equal to the prompt's example, distinct texts; the swap and fixed board-blind baselines."""
+    answers equal to the prompt's example, distinct texts; on the val boards also the swap and fixed board-blind
+    baselines (the swap baseline grows with the square of the boards per bucket)."""
     import torch
     import transformers
     from transformers import AutoModelForCausalLM
@@ -178,7 +187,7 @@ def run_eval(split: str = "7x7-v1", name: str = "eval", n_per_bucket: int = 300,
     ckpt_dir, ckpt_step = _checkpoint_dir(checkpoint) if checkpoint else (None, None)
     fmt = Format()
     tok = load_tokenizer()
-    boards = _val_boards(split, n_per_bucket)
+    boards = file_boards(boards_file) if boards_file else _val_boards(split, n_per_bucket)
     greedy_cfg = generation_config(tok, "greedy")
     sample_cfg = generation_config(tok, "sample", temperature=temperature)
     ks = tuple(k for k in KS if k <= n_samples)
@@ -188,7 +197,11 @@ def run_eval(split: str = "7x7-v1", name: str = "eval", n_per_bucket: int = 300,
     config = {"experiment": "eval", "split": split, "model": MODEL_REPO, "revision": MODEL_REVISION,
               "checkpoint": checkpoint, "checkpoint_step": ckpt_step, "dtype": "bfloat16", "torch": torch.__version__,
               "transformers": transformers.__version__, "gpu": torch.cuda.get_device_name(0), "format": fmt.name,
-              "boards": EVAL_SELECTION, "n_per_bucket": n_per_bucket, "n_samples": n_samples, "ks": list(ks),
+              "boards": EVAL_SELECTION if boards_file is None else f"the boards of {Path(boards_file).name} in file "
+                                                                   f"order ({len(boards)})",
+              **({} if boards_file is None else {"boards_file": Path(boards_file).name,
+                                                 "boards_sha256": _sha256(Path(boards_file))}),
+              "n_per_bucket": n_per_bucket if boards_file is None else None, "n_samples": n_samples, "ks": list(ks),
               "seed": seed, "batch_size": batch_size, "mem_cap_gib": mem_cap_gib,
               "greedy": {k: getattr(greedy_cfg, k) for k in keys},
               "sample": {k: getattr(sample_cfg, k) for k in keys}}
@@ -219,8 +232,7 @@ def run_eval(split: str = "7x7-v1", name: str = "eval", n_per_bucket: int = 300,
     metrics = {
         "table": summary_rows(recs, fmt, ks),
         "by_length": summary_rows(recs, fmt, ks, by_length=True),
-        "swap": swap_baseline(boards, greedy, fmt),
-        "fixed": fixed_baseline(boards),
+        **({} if boards_file else {"swap": swap_baseline(boards, greedy, fmt), "fixed": fixed_baseline(boards)}),
         "parse_errors": dict(errors),
         "parse_error_examples": {e: [r["completion"] for r in recs if r["parse_error"] == e][:3] for e in errors},
         "end_tokens": dict(Counter(str(r["end_token"]) for r in recs)),
@@ -232,6 +244,137 @@ def run_eval(split: str = "7x7-v1", name: str = "eval", n_per_bucket: int = 300,
     }
     w.close(metrics)
     return metrics
+
+
+# ------------------------------------------------------------------------------------------------------- new boards
+
+NEW_BOARDS_N = 2000
+NEW_BUCKET = "new"  # bucket label of boards read from a file
+BOARD_FIELDS = ("board_id", "text", "opt_len", "budget")
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def new_boards(n: int = NEW_BOARDS_N, split: str = "7x7-v1", progress=None) -> tuple[list[dict], dict]:
+    """`n` one-box boards that no split holds: the split's one-box stream read on past its last consumed candidate,
+    keeping a board when its layout class hashes to train but holds no board of the split (nor of an earlier kept
+    board) and the board is solvable in fewer than long_from moves (the in_dist range). They come from the training
+    distribution, but no model trains on them and no checkpoint is chosen on them. Returns the records and per-reason
+    counts of the candidates."""
+    from sokolm.generate import stream
+    from sokolm.simulate import simulate
+    from sokolm.sokoban import PUSH, Board, action_letters
+    from sokolm.solver import solve
+    from sokolm.splits import SPLIT_NAMES, class_id, layout_class, split_of
+
+    cfg = SPLITS[split]
+    taken, start = set(), 0
+    for s in SPLIT_NAMES:
+        for r in load(split, s):
+            taken.add(r["layout_class"])
+            if r["n_boxes"] == 1:
+                start = max(start, r["stream_index"] + 1)
+    st = Counter()
+    recs = []
+    for index, text, why in stream(cfg["size"], cfg["seeds"]["one_box"], 1, cfg["max_wall_frac"],
+                                   cfg["wall_sampling"]):
+        if index < start:
+            continue
+        st["candidates"] += 1
+        if text is None:
+            st[why] += 1
+            continue
+        cls = layout_class(text)
+        cid = class_id(cls)
+        if cid in taken:
+            st["class_taken"] += 1
+            continue
+        where = split_of(cls, cfg)
+        if where != "train":
+            st[f"class_of_{where}"] += 1
+            continue
+        board = Board(text)
+        sol = solve(board)
+        st["bfs"] += 1
+        if not sol.solvable:
+            st["unsolvable"] += 1
+            continue
+        if sol.length >= cfg["long_from"]:
+            st["long"] += 1
+            continue
+        taken.add(cid)
+        o = simulate(board, sol.actions, sol.length)
+        recs.append({"board_id": f"{split}-new-1b-{index:07d}", "text": text, "opt_len": sol.length,
+                     "budget": 2 * sol.length, "solution": action_letters(sol.actions),
+                     "n_pushes": o.events.count(PUSH), "n_optimal": sol.n_optimal, "layout_class": cid,
+                     "stream_index": index})
+        st["accepted"] += 1
+        if progress and st["accepted"] % 500 == 0:
+            progress(f"{st['accepted']} boards, {st['candidates']} candidates")
+        if len(recs) == n:
+            break
+    return recs, {"first_index": start, **dict(sorted(st.items()))}
+
+
+def check_new_boards(recs: list[dict], split: str = "7x7-v1") -> dict:
+    """Recompute what the records of `new_boards` claim; raise on the first violation."""
+    from sokolm.simulate import simulate
+    from sokolm.sokoban import Board, parse_actions
+    from sokolm.solver import solve
+    from sokolm.splits import SPLIT_NAMES, class_id, layout_class, split_of
+
+    cfg = SPLITS[split]
+    split_classes = {r["layout_class"] for s in SPLIT_NAMES for r in load(split, s)}
+    seen = set()
+    for r in recs:
+        cls = layout_class(r["text"])
+        if class_id(cls) != r["layout_class"] or split_of(cls, cfg) != "train":
+            raise ValueError(f"{r['board_id']}: layout class does not hash to train")
+        if r["layout_class"] in split_classes or r["layout_class"] in seen:
+            raise ValueError(f"{r['board_id']}: layout class already used")
+        seen.add(r["layout_class"])
+        board = Board(r["text"])
+        if len(board.targets) != 1 or not 1 <= r["opt_len"] < cfg["long_from"]:
+            raise ValueError(f"{r['board_id']}: not a one-box board of the in_dist range")
+        o = simulate(board, parse_actions(r["solution"]), r["budget"])
+        if not (o.solved_at == r["opt_len"] == solve(board).length and o.n_noop == 0):
+            raise ValueError(f"{r['board_id']}: the stored solution is not optimal")
+    return {"boards": len(recs), "distinct_layout_classes": len(seen), "class_hashes_to_train": True,
+            "no_class_shared_with_the_split": True, "solutions_replay_to_solved_at_opt_len": True}
+
+
+def run_new_boards(n: int = NEW_BOARDS_N, split: str = "7x7-v1", name: str = "new-boards", progress=None) -> dict:
+    """Run: `new_boards`, checked, written to boards.jsonl in the run directory (the file `run_eval` takes as
+    `boards_file`), with the share of each optimal length against the split's train boards."""
+    t0 = time.perf_counter()
+    w = RunWriter(name, {"experiment": "new_boards", "split": split, "n": n}, claim_level="own-experiment")
+    recs, stats = new_boards(n, split, progress)
+    checks = check_new_boards(recs, split)
+    path = w.dir / "boards.jsonl"
+    path.write_text("".join(json.dumps(r) + "\n" for r in recs))
+    train = Counter(r["opt_len"] for r in load(split, "train"))
+    new = Counter(r["opt_len"] for r in recs)
+    lengths = [{"opt_len": L, "new": new[L], "new_share": round(new[L] / max(1, len(recs)), 4),
+                "train_share": round(train[L] / sum(train.values()), 4)} for L in sorted(set(train) | set(new))]
+    metrics = {"stream": stats, "checks": checks, "lengths": lengths, "file": path.name, "sha256": _sha256(path),
+               "seconds": round(time.perf_counter() - t0, 1), "run_id": w.run_id}
+    w.close(metrics)
+    return metrics
+
+
+def file_boards(path: str) -> list[dict]:
+    """The boards of a JSONL file in file order, labelled with bucket NEW_BUCKET."""
+    recs = [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
+    for r in recs:
+        missing = [k for k in BOARD_FIELDS if k not in r]
+        if missing:
+            raise ValueError(f"{path}: board {r.get('board_id')} lacks {missing}")
+        r["bucket"] = NEW_BUCKET
+    if len({r["board_id"] for r in recs}) != len(recs):
+        raise ValueError(f"{path}: repeated board ids")
+    return recs
 
 
 # -------------------------------------------------------------------------------------------------------------- SFT

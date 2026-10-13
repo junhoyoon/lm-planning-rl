@@ -104,6 +104,18 @@ def cmd_build_split(a):
     print(f"run: {RUNS / m['run_id']}")
 
 
+def cmd_new_boards(a):
+    from sokolm.pipeline import run_new_boards
+
+    m = run_new_boards(n=a.n, split=a.split, name=a.name, progress=print)
+    print("stream:", m["stream"])
+    print("checks:", m["checks"])
+    print("optimal length: share of new boards / of train boards: "
+          + ", ".join(f"{r['opt_len']} {r['new_share']}/{r['train_share']}" for r in m["lengths"]))
+    print(f"boards: {RUNS / m['run_id'] / m['file']}  sha256 {m['sha256'][:16]}")
+    print(f"run: {RUNS / m['run_id']}")
+
+
 def cmd_fetch(a):
     from sokolm.assets import MODELS, fetch
 
@@ -116,9 +128,10 @@ def cmd_eval(a):
     from sokolm.pipeline import run_eval
 
     m = run_eval(split=a.split, name=a.name, n_per_bucket=a.n, n_samples=a.samples, temperature=a.temperature,
-                 seed=a.seed, batch_size=a.batch_size, checkpoint=a.checkpoint)
+                 seed=a.seed, batch_size=a.batch_size, checkpoint=a.checkpoint, boards_file=a.boards)
     _print_table(m["table"])
-    _print_table(m["swap"])
+    if "swap" in m:
+        _print_table(m["swap"])
     print("parse errors:", m["parse_errors"])
     print("timing:", m["timing"], "gpu:", m["gpu"])
     print(f"run: {RUNS / m['run_id']}")
@@ -212,12 +225,19 @@ def main():
     s.add_argument("--force", action="store_true", help="overwrite an existing split (data files and manifest)")
     s.set_defaults(fn=cmd_build_split, lock=True)
 
+    s = sub.add_parser("new-boards", help="one-box boards beyond the split: layout classes that hash to train but hold "
+                                          "no board of the split, in the in_dist length range")
+    s.add_argument("--split", default="7x7-v1")
+    s.add_argument("--name", default="new-boards")
+    s.add_argument("--n", type=int, default=pl.NEW_BOARDS_N)
+    s.set_defaults(fn=cmd_new_boards, lock=True)
+
     s = sub.add_parser("fetch", help="download the pinned files of the model and record their sha256")
     s.add_argument("--model", default="qwen2.5-0.5b-instruct", help="a key of sokolm.assets.MODELS, or all")
     s.set_defaults(fn=cmd_fetch, lock=False)
 
-    s = sub.add_parser("eval", help="greedy solve rate, pass@k and board-blind baselines on the val boards, for the "
-                                    "base model or a saved checkpoint")
+    s = sub.add_parser("eval", help="greedy solve rate, pass@k and board-blind baselines on the val boards (or the "
+                                    "boards of a file), for the base model or a saved checkpoint")
     s.add_argument("--split", default="7x7-v1")
     s.add_argument("--name", default="eval")
     s.add_argument("--n", type=int, default=300, help="val boards per bucket (first in file order)")
@@ -227,6 +247,9 @@ def main():
     s.add_argument("--batch-size", type=int, default=pl.EVAL_BATCH, help="sequences per generate call")
     s.add_argument("--checkpoint", default=None,
                    help="evaluate a saved checkpoint instead of the base model: <sft or grpo run id>/<best|final>")
+    s.add_argument("--boards", default=None,
+                   help="evaluate on the boards of this JSONL file (from new-boards) instead of the val boards; "
+                        "--n is then unused and the board-blind baselines are skipped")
     s.set_defaults(fn=cmd_eval, lock=True)
 
     s = sub.add_parser("sft", help="one SFT run (TRL SFTTrainer), with val loss and val greedy solve rates during "

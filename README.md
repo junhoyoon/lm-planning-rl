@@ -10,14 +10,17 @@ learning (GRPO), on puzzles where a program can check every answer and find the 
 Qwen2.5-0.5B-Instruct on 7×7 boards, generating a complete move sequence in one response. SFT targets are
 BFS-optimal solutions.
 
-- **The SFT schedule changed the conclusion.** GRPO raised the in-distribution greedy solve rate from 87.0% to 93.7%,
-  against 84.7% for continued SFT at a constant learning rate. Continued SFT with learning-rate decay also reached
-  93.7%, closing the initial gap.
-- **GRPO's remaining gains were limited.** Against SFT with learning-rate decay, gains in sampling pass@1 ranged from
-  0.0 to 2.6 percentage points across starting checkpoints, with no clear advantage on solution lengths beyond the
-  training range.
+- **The SFT schedule changed the conclusion.** GRPO raised the in-distribution greedy solve rate on validation boards
+  from 87.0% to 93.7%, against 84.7% for continued SFT at a constant learning rate. Continued SFT with learning-rate
+  decay also reached 93.7%, closing the initial gap.
+- **After the decay, GRPO showed no advantage on new boards.** Against SFT with learning-rate decay, GRPO's sampling
+  pass@1 differed by 0.0 and +2.6 percentage points on the 300 validation boards, depending on the starting
+  checkpoint, but by −2.3 and +0.3 points on 2,000 new boards that no run trained on and no choice was based on. On
+  the new boards, SFT with the decay had the higher greedy solve rate and pass@16 from both starting checkpoints. On
+  solution lengths beyond the training range (validation boards only), GRPO showed no clear advantage.
 - **Compute:** GRPO took approximately 14× as long per training step as SFT in this setup.
-- **Evaluation scope:** One seed per run; validation boards only.
+- **Evaluation scope:** One seed per run. Validation boards, and 2,000 new in-distribution boards evaluated after the
+  validation results as a check; the test split is untouched.
 
 ![Animation: 300 validation boards as squares in two rows, colored by how many of 16 sampled answers solve each board, from the base model through SFT, then GRPO from the SFT model (top) and from SFT with the learning rate decayed to 0 (bottom)](results/sft-vs-grpo/board-solves.svg)
 
@@ -37,7 +40,7 @@ script: [`board-solves.json`](results/sft-vs-grpo/board-solves.json),
 | path | contents |
 |---|---|
 | [`sokoban-lm/`](sokoban-lm/) | the Python package `sokolm` and its tests |
-| [`results/sft-vs-grpo/`](results/sft-vs-grpo/) | report, recorded runs (no checkpoints), analysis script |
+| [`results/sft-vs-grpo/`](results/sft-vs-grpo/) | report, recorded runs (no checkpoints), the 2,000 new boards, analysis script |
 
 `sokolm` modules:
 
@@ -49,7 +52,7 @@ script: [`board-solves.json`](results/sft-vs-grpo/board-solves.json),
 | `assets`, `lm` | the pinned model files (sha256-checked) and batched generation with every decoding setting explicit |
 | `train` | TRL wiring: SFT and GRPO datasets, the reward function, trainers, SFT target log-probabilities |
 | `evaluate` | greedy solve rate, pass@k, board-blind baselines, GRPO group statistics |
-| `pipeline` | the run commands: `build-split`, `eval`, `sft`, `grpo`, `val-loss` |
+| `pipeline` | the run commands: `build-split`, `new-boards`, `eval`, `sft`, `grpo`, `val-loss` |
 | `record`, `cli`, `guard`, `paths` | run directories with provenance, the command line, a resource guard, file locations |
 
 ## Setup
@@ -102,6 +105,12 @@ during development, and decided the direction of the experiments and when to sto
   exact gradient in closed form.
 - **Comparisons.** The author added run 7, a comparison to assess whether one epoch of training on the additional
   boards alone could explain GRPO's improvement (§5.2 of the report), and decided to stop the follow-up runs after it.
+- **Follow-up on new boards.** The author questioned whether run 6's in-distribution advantage over run 7 showed a
+  GRPO gain that survives the learning-rate decay, and made it the follow-up's question. The author revised the test
+  design with SFT controls that skip run 7's learning-rate re-warmup, to separate GRPO's objective from run 7's
+  schedule, and chose to evaluate on new boards first, with further runs only if the advantage held there. When it
+  did not, the author extended the evaluation to every model of the report and revised the report and this README
+  (§5.5 of the report).
 - **Review.** The author reviewed the results before deciding the next steps and corrected conclusions that went
   beyond the evidence. In the report, the author set how the summary is framed and required it to state the setting's
   bias toward SFT, that the GRPO–SFT difference depends on the starting model, and the cost as a per-step ratio rather
