@@ -437,6 +437,12 @@ the board file and in the answers; each of these manifests records this under `e
 [`new-boards.jsonl`](new-boards.jsonl) is byte-identical to the file `new-boards` writes. Removed from the manifests:
 the host name, a development label, and the list and diff of uncommitted non-code files.
 
+**Rerun check.** With the code here, `eval --boards` on the first 512 new boards reproduced every recorded answer of
+the base model on those boards, 512 greedy and 8,192 sampled answers, with the same text, reward and token count, on
+the same GPU and library versions. These boards make up the recorded run's first batches, so the batches and the seed
+matched. Run on the first 4 boards alone, 2 of the 4 greedy answers differed from the record, both cut off at the
+128-token limit: a different batch layout changes the floating-point arithmetic and can change a greedy answer (§6).
+
 **Timing.** The step times were recorded with Python's `perf_counter`. On this WSL2 machine that clock ran fast on the
 day of the runs: against the Windows clock, the recorded times of runs 1–6 were 3.6–4.9% too long (from the resource
 guard's logs, not included; run 7 was not checked). Both methods were timed with the same clock, so the ratio in §5.4
